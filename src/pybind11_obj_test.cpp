@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <sstream>
@@ -28,6 +29,8 @@ struct Point {
     std::cout << "constructor called: " << this << "  <Point (" << this->x
               << " " << this->y << ")>" << std::endl;
   };
+  // Point(const Point &p) = delete;
+  // Point &operator=(const Point &p) = delete;
   Point(const Point &p) : x(p.x), y(p.y) {
     std::cout << "copy constructor called from " << &p << ", created" << this
               << "  <Point (" << this->x << " " << this->y << ")>" << std::endl;
@@ -42,10 +45,12 @@ struct Point {
   double y;
 };
 
-// make Point valid for use in numpy
-PYBIND11_NUMPY_OBJECT_DTYPE(Point);
+typedef std::unique_ptr<Point> PointPtr;
 
-py::array_t<Point> create(py::array_t<double> xs, py::array_t<double> ys) {
+// make Point valid for use in numpy
+PYBIND11_NUMPY_OBJECT_DTYPE(PointPtr);
+
+py::array_t<PointPtr> create(py::array_t<double> xs, py::array_t<double> ys) {
   py::buffer_info xbuf = xs.request(), ybuf = ys.request();
   if (xbuf.ndim != 1 || ybuf.ndim != 1) {
     throw std::runtime_error("Number of dimensions must be one");
@@ -54,7 +59,7 @@ py::array_t<Point> create(py::array_t<double> xs, py::array_t<double> ys) {
     throw std::runtime_error("Input shapes must match");
   }
 
-  auto result = py::array_t<Point>(xbuf.size);
+  auto result = py::array_t<PointPtr>(xbuf.size);
   py::buffer_info rbuf = result.request();
 
   double *xptr = static_cast<double *>(xbuf.ptr);
@@ -66,9 +71,14 @@ py::array_t<Point> create(py::array_t<double> xs, py::array_t<double> ys) {
   std::cout << "constructing point array " << std::endl;
 
   for (size_t i = 0; i < size; i++) {
+    // this passes back the original references
+    auto pt = new Point(xptr[i], yptr[i]);
+    rptr[i] = py::cast(std::unique_ptr<Point>(pt));
+
     // this copies the entire object during assignment
-    py::object obj = py::cast(Point(xptr[i], yptr[i]));
-    rptr[i] = obj;
+    // py::object obj =
+    //     py::cast(Point(xptr[i], yptr[i]));
+    // rptr[i] = obj;
   }
 
   std::cout << "returning point array " << std::endl;
@@ -78,6 +88,8 @@ py::array_t<Point> create(py::array_t<double> xs, py::array_t<double> ys) {
 
 PYBIND11_MODULE(pybind11_obj_test, m) {
   py::class_<Point>(m, "Point").def("__repr__", [](const Point &p) {
+    // std::cout << "repr of " << &p << std::endl;
+
     std::ostringstream os;
     os << "<Point (" << p.x << " " << p.y << ")>";
     return os.str();
