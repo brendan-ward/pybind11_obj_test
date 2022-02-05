@@ -24,8 +24,29 @@ namespace py = pybind11;
   }                                                                            \
   }
 
+struct ForeignObj {
+  ForeignObj() : type(1) {
+    std::cout << "ForeignObj constructor called: " << this << std::endl;
+    // arbitrary memory allocation
+    this->mem = static_cast<double *>(malloc(sizeof(double) * 10));
+  }
+
+  ForeignObj(ForeignObj &f) : type(f.type) {
+    std::cout << "ForeignObj copy constructor called: " << this << std::endl;
+  }
+
+  ~ForeignObj() {
+    std::cout << "ForeignObj destructor called: " << this << std::endl;
+    free(this->mem);
+  }
+
+  // arbitrary members
+  int type;
+  double *mem;
+};
+
 struct Point {
-  Point(double x, double y) : x(x), y(y) {
+  Point(double x, double y) : x(x), y(y), obj() {
     std::cout << "constructor called: " << this << "  <Point (" << this->x
               << " " << this->y << ")>" << std::endl;
   };
@@ -43,6 +64,7 @@ struct Point {
 
   double x;
   double y;
+  ForeignObj obj;
 };
 
 typedef std::unique_ptr<Point> PointPtr;
